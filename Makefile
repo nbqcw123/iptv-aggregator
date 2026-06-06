@@ -1,6 +1,6 @@
 # IPTV 聚合器 - 快捷命令
 
-.PHONY: help build run test clean
+.PHONY: help build run test clean release
 
 help: ## 显示帮助
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -26,7 +26,16 @@ logs: ## 查看日志
 test: ## 运行后端测试
 	cd backend && source .venv/bin/activate && python3 -c "from app.main import app; print('✅ OK')"
 
-update-readme: ## 更新 README 版本号
+release: ## 发版：更新 README + 构建 + 提交 (用法: make release v=2.1.0)
+	@if [ -z "$(v)" ]; then \
+		bash scripts/update_readme.sh; \
+	else \
+		bash scripts/update_readme.sh $(v); \
+	fi
+	cd frontend && npm run build
+	@echo "✅ 发版完成。运行 'git add -A && git commit -m \"release: v$(v)\" && git push' 提交"
+
+update-readme: ## 仅更新 README 版本号
 	bash scripts/update_readme.sh
 
 clean: ## 清理构建产物
