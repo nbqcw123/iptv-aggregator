@@ -6,399 +6,389 @@
         <el-icon :size="24" color="#06b6d4"><Monitor /></el-icon>
         <span class="brand-text">IPTV 聚合器</span>
       </div>
+      <div class="topbar-right">
+        <el-tag :type="scheduleCfg.enabled ? 'success' : 'info'" size="small" class="sched-tag">
+          <el-icon><Timer /></el-icon>
+          {{ scheduleCfg.enabled ? `每天 ${String(scheduleCfg.hour).padStart(2,'0')}:${String(scheduleCfg.minute).padStart(2,'0')} 自动更新` : '定时未开启' }}
+        </el-tag>
+      </div>
     </header>
 
     <div class="main-layout">
       <!-- 左侧面板 -->
       <aside class="control-panel">
-        <!-- 搜索 -->
+        <!-- IP 版本选择 -->
         <div class="panel-section">
-          <h3><el-icon><Search /></el-icon> 1. 搜索源</h3>
-          <label>源类型</label>
-          <el-select v-model="searchForm.source_type" size="small" style="width:100%;margin-bottom:8px">
+          <h3><el-icon><Connection /></el-icon> IP 版本</h3>
+          <el-radio-group v-model="ipVersion" size="small">
+            <el-radio-button label="ipv4">IPv4</el-radio-button>
+            <el-radio-button label="ipv6">IPv6</el-radio-button>
+            <el-radio-button label="both">双栈</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <!-- 搜索源 -->
+        <div class="panel-section">
+          <h3><el-icon><Search /></el-icon> 搜索源</h3>
+          <el-select v-model="sourceType" size="small" style="width:100%;margin-bottom:8px">
             <el-option label="全部（组播+酒店）" value="all" />
-            <el-option label="组播源" value="multicast" />
-            <el-option label="酒店源" value="hotel" />
+            <el-option label="仅组播源" value="multicast" />
+            <el-option label="仅酒店源" value="hotel" />
           </el-select>
-          <label>自定义 URL（可选，每行一个）</label>
-          <el-input v-model="customUrlsInput" type="textarea" :rows="3"
-            placeholder="留空则使用内置源" size="small" style="margin-bottom:8px" />
-          <el-button type="primary" class="full-btn" :loading="searching" @click="doSearch" size="small">
-            <el-icon><Search /></el-icon> 搜索
+          <el-input v-model="customUrls" type="textarea" :rows="3"
+            placeholder="自定义 URL（可选）" size="small" />
+        </div>
+
+        <!-- 测速设置 -->
+        <div class="panel-section">
+          <h3><el-icon><Odometer /></el-icon> 测速设置</h3>
+          <label>并发数</label>
+          <el-slider v-model="concurrency" :min="5" :max="50" show-input size="small" />
+          <label style="margin-top:6px">超时 {{ timeout }}s / 每频道保留 {{ maxKeep }} 条</label>
+          <el-slider v-model="timeout" :min="2" :max="15" show-input size="small" />
+          <el-slider v-model="maxKeep" :min="1" :max="20" show-input size="small" />
+        </div>
+
+        <!-- 执行按钮 -->
+        <div class="panel-section">
+          <el-button type="primary" class="full-btn" :loading="running" @click="runPipeline" size="default">
+            <el-icon><VideoPlay /></el-icon> 搜索 → 测速 → 择优
+          </el-button>
+          <el-button type="success" class="full-btn" :disabled="!entries.length"
+            @click="dlM3U" size="small" style="margin-top:6px">
+            <el-icon><Download /></el-icon> 导出 M3U ({{ entries.length }})
+          </el-button>
+          <el-button type="success" class="full-btn" :disabled="!entries.length"
+            @click="dlTXT" size="small" style="margin-top:4px">
+            <el-icon><Download /></el-icon> 导出 TXT ({{ entries.length }})
           </el-button>
         </div>
 
-        <!-- 验证 -->
+        <!-- 进度 -->
+        <div class="panel-section" v-if="running">
+          <el-progress :percentage="progress.pct" :stroke-width="10" striped striped-flow />
+          <div class="progress-text">{{ progress.text }}</div>
+        </div>
+
+        <!-- 频道表 -->
         <div class="panel-section">
-          <h3><el-icon><CircleCheck /></el-icon> 2. 验证可用性</h3>
-          <div style="display:flex;gap:8px;margin-bottom:8px">
-            <div style="flex:1">
-              <label>并发</label>
-              <el-input-number v-model="validateForm.concurrency" :min="5" :max="50" size="small" style="width:100%" />
-            </div>
-            <div style="flex:1">
-              <label>超时(秒)</label>
-              <el-input-number v-model="validateForm.timeout" :min="2" :max="15" size="small" style="width:100%" />
-            </div>
+          <h3><el-icon><List /></el-icon> 频道表 ({{ channels.length }})</h3>
+          <el-button size="small" class="full-btn" @click="showChannelEditor = true">
+            <el-icon><Edit /></el-icon> 编辑频道表
+          </el-button>
+          <el-button size="small" class="full-btn" @click="showScheduleDlg = true" style="margin-top:4px">
+            <el-icon><Timer /></el-icon> 定时设置
+          </el-button>
+        </div>
+
+        <!-- 统计 -->
+        <div class="panel-section" v-if="stats.total">
+          <h3><el-icon><DataAnalysis /></el-icon> 结果统计</h3>
+          <div class="mini-stats">
+            <span>总计 {{ stats.total }}</span>
+            <span v-for="(n,g) in stats.groups" :key="g" class="mg">{{ g }}:{{ n }}</span>
           </div>
-          <el-button type="warning" class="full-btn" :loading="validating"
-            :disabled="!searchResult.length" @click="doValidate" size="small">
-            <el-icon><CircleCheck /></el-icon> 验证全部 ({{ searchResult.length }})
-          </el-button>
-        </div>
-
-        <!-- 导出 -->
-        <div class="panel-section">
-          <h3><el-icon><Download /></el-icon> 3. 导出文件</h3>
-          <el-button type="success" class="full-btn" :disabled="!validResult.length"
-            @click="downloadExport('m3u')" size="small" style="margin-bottom:6px">
-            <el-icon><Download /></el-icon> 导出 M3U ({{ validResult.length }})
-          </el-button>
-          <el-button type="success" class="full-btn" :disabled="!validResult.length"
-            @click="downloadExport('txt')" size="small" style="margin-bottom:6px">
-            <el-icon><Download /></el-icon> 导出 TXT ({{ validResult.length }})
-          </el-button>
-          <el-divider style="margin:8px 0" />
-          <el-button class="full-btn" @click="downloadFull('m3u')" size="small" style="margin-bottom:4px">
-            <el-icon><Promotion /></el-icon> 一键搜索→验证→M3U
-          </el-button>
-          <el-button class="full-btn" @click="downloadFull('txt')" size="small">
-            <el-icon><Promotion /></el-icon> 一键搜索→验证→TXT
-          </el-button>
-        </div>
-
-        <!-- 内置源 -->
-        <div class="panel-section">
-          <el-button @click="showBuiltinSources" class="full-btn" size="small">
-            <el-icon><Link /></el-icon> 查看内置源 ({{ builtinCount }})
-          </el-button>
+          <div class="mini-stats" style="margin-top:4px">
+            <span v-for="(n,p) in stats.protocols" :key="p" class="mg">{{ p }}:{{ n }}</span>
+          </div>
         </div>
       </aside>
 
       <!-- 右侧结果 -->
       <main class="result-panel">
-        <!-- 统计 -->
-        <div class="stats-row">
-          <div class="stat-card">
-            <div class="stat-num">{{ stats.searched }}</div>
-            <div class="stat-label">搜索到地址</div>
-          </div>
-          <div class="stat-card stat-ok">
-            <div class="stat-num">{{ stats.valid }}</div>
-            <div class="stat-label">验证有效</div>
-          </div>
-          <div class="stat-card stat-fail">
-            <div class="stat-num">{{ stats.invalid }}</div>
-            <div class="stat-label">已剔除</div>
-          </div>
-          <div class="stat-card" v-if="stats.searched > 0">
-            <div class="stat-num">{{ validRate }}%</div>
-            <div class="stat-label">有效率</div>
-          </div>
-        </div>
-
-        <!-- 进度 -->
-        <div v-if="searching || validating" class="progress-area">
-          <el-progress :percentage="progress_pct" :stroke-width="12" striped striped-flow />
-          <div class="progress-text">{{ progress_text }}</div>
-        </div>
-
         <!-- 结果表格 -->
-        <el-tabs v-model="activeTab" class="result-tabs">
-          <el-tab-pane :label="`全部 (${searchResult.length})`" name="all">
-            <el-table :data="pagedAll" stripe size="small" height="calc(100vh - 320px)"
-              empty-text="暂无数据，请先搜索">
-              <el-table-column label="#" type="index" width="50" />
-              <el-table-column prop="name" label="频道名" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="group" label="分组" width="90" />
-              <el-table-column prop="source_type" label="类型" width="70">
-                <template #default="{ row }">
-                  <el-tag size="small" :type="row.source_type === 'hotel' ? 'warning' : 'info'">
-                    {{ row.source_type === 'hotel' ? '酒店' : '组播' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="source_name" label="来源" width="120" show-overflow-tooltip />
-              <el-table-column label="播放地址" min-width="250">
-                <template #default="{ row }">
-                  <span style="font-size:12px;word-break:break-all">{{ row.url.length > 45 ? row.url.substring(0, 45) + '...' : row.url }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="可用" width="70">
-                <template #default="{ row }">
-                  <span v-if="row.validated === undefined" style="color:#94a3b8">—</span>
-                  <el-tag v-else-if="row.validated" type="success" size="small">✓</el-tag>
-                  <el-tag v-else type="danger" size="small">✗</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="60" fixed="right">
-                <template #default="{ row }">
-                  <el-button size="small" text @click="testSingle(row)">测</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-pagination v-model:current-page="pageAll" :page-size="page_size" :total="searchResult.length"
-              layout="prev, pager, next, jumper, total" small style="margin-top:8px;justify-content:flex-end" />
-          </el-tab-pane>
-
-          <el-tab-pane :label="`已验证有效 (${validResult.length})`" name="valid">
-            <el-table :data="pagedValid" stripe size="small" height="calc(100vh - 320px)" empty-text="暂无">
-              <el-table-column label="#" type="index" width="50" />
-              <el-table-column prop="name" label="频道名" min-width="150" />
-              <el-table-column prop="group" label="分组" width="90" />
-              <el-table-column prop="source_type" label="类型" width="70">
-                <template #default="{ row }">
-                  <el-tag size="small" :type="row.source_type === 'hotel' ? 'warning' : 'info'">
-                    {{ row.source_type === 'hotel' ? '酒店' : '组播' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="播放地址" min-width="300">
-                <template #default="{ row }">
-                  <span style="font-size:12px;word-break:break-all;color:#22c55e">{{ row.url.length > 50 ? row.url.substring(0, 50) + '...' : row.url }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="response_time" label="响应" width="60" />
-            </el-table>
-            <el-pagination v-model:current-page="pageValid" :page-size="page_size" :total="validResult.length"
-              layout="prev, pager, next, jumper, total" small style="margin-top:8px;justify-content:flex-end" />
-          </el-tab-pane>
-
-          <el-tab-pane :label="`已剔除 (${invalidResult.length})`" name="invalid">
-            <el-table :data="pagedInvalid" stripe size="small" height="calc(100vh - 320px)" empty-text="暂无">
-              <el-table-column label="#" type="index" width="50" />
-              <el-table-column prop="name" label="频道名" min-width="150" />
-              <el-table-column prop="group" label="分组" width="90" />
-              <el-table-column label="播放地址" min-width="300">
-                <template #default="{ row }">
-                  <span style="font-size:12px;color:#64748b">{{ row.url.length > 50 ? row.url.substring(0, 50) + '...' : row.url }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="60">
-                <template #default="{ row }">
-                  <el-button size="small" text @click="testSingle(row)">重测</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-pagination v-model:current-page="pageInvalid" :page-size="page_size" :total="invalidResult.length"
-              layout="prev, pager, next, jumper, total" small style="margin-top:8px;justify-content:flex-end" />
-          </el-tab-pane>
-        </el-tabs>
+        <el-table :data="entries" stripe size="small" height="calc(100vh - 100px)"
+          empty-text="暂无数据。设置频道表后点击「搜索→测速→择优」">
+          <el-table-column type="index" width="50" fixed />
+          <el-table-column prop="group" label="分组" width="80" fixed />
+          <el-table-column prop="name" label="频道名" min-width="140" fixed />
+          <el-table-column label="播放地址" min-width="300">
+            <template #default="{ row }">
+              <span :style="{color: row.valid ? '#22c55e' : '#ef4444'}" class="url-text">
+                {{ row.url.length > 55 ? row.url.substring(0,55) + '...' : row.url }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="protocol" label="协议" width="60">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.protocol === 'ipv6' ? 'warning' : 'info'">
+                {{ row.protocol }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="response_time" label="响应" width="70">
+            <template #default="{ row }">
+              <span :style="{color: row.response_time < 500 ? '#22c55e' : row.response_time < 2000 ? '#f59e0b' : '#ef4444'}">
+                {{ row.response_time }}ms
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="source_name" label="来源" width="100" show-overflow-tooltip />
+        </el-table>
       </main>
     </div>
 
-    <!-- 内置源对话框 -->
-    <el-dialog v-model="builtinVisible" title="内置搜索源" width="750px">
-      <el-tabs>
-        <el-tab-pane label="组播源">
-          <el-table :data="builtinSources.multicast" stripe size="small" max-height="400">
-            <el-table-column prop="name" label="名称" min-width="150" />
-            <el-table-column label="类型" width="80">
-              <template #default><el-tag size="small" type="info">组播</el-tag></template>
-            </el-table-column>
-            <el-table-column prop="url" label="URL" min-width="350" show-overflow-tooltip />
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="酒店源">
-          <el-table :data="builtinSources.hotel" stripe size="small" max-height="400">
-            <el-table-column prop="name" label="名称" min-width="150" />
-            <el-table-column label="类型" width="80">
-              <template #default><el-tag size="small" type="warning">酒店</el-tag></template>
-            </el-table-column>
-            <el-table-column prop="url" label="URL" min-width="350" show-overflow-tooltip />
-          </el-table>
-        </el-tab-pane>
-      </el-tabs>
-    </el-dialog>
-
-    <!-- 单地址测试对话框 -->
-    <el-dialog v-model="singleTestVisible" title="测试播放地址" width="450px">
-      <div v-if="singleTestResult">
-        <p><strong>地址：</strong>{{ singleTestResult.url }}</p>
-        <p><strong>状态：</strong>
-          <el-tag :type="singleTestResult.valid ? 'success' : 'danger'">
-            {{ singleTestResult.valid ? '✓ 可用' : '✗ 不可用' }}
-          </el-tag>
-        </p>
-        <p><strong>HTTP 状态码：</strong>{{ singleTestResult.status_code || 'N/A' }}</p>
-        <p><strong>响应时间：</strong>{{ singleTestResult.response_time }}ms</p>
-        <p v-if="singleTestResult.error"><strong>错误：</strong>{{ singleTestResult.error }}</p>
-      </div>
-      <div v-else style="text-align:center;padding:20px;color:#94a3b8">
-        <el-icon :size="32" class="is-loading"><Loading /></el-icon>
-        <p>测试中...</p>
+    <!-- 频道表编辑对话框 -->
+    <el-dialog v-model="showChannelEditor" title="频道表管理" width="600px" destroy-on-close>
+      <div class="channel-editor">
+        <div class="ch-toolbar">
+          <el-button size="small" type="primary" @click="addChannel">
+            <el-icon><Plus /></el-icon> 添加
+          </el-button>
+          <el-button size="small" @click="importChannels">
+            <el-icon><Upload /></el-icon> 批量导入
+          </el-button>
+          <el-button size="small" @click="resetChannels">
+            <el-icon><RefreshLeft /></el-icon> 重置默认
+          </el-button>
+          <el-input v-model="chFilter" placeholder="筛选" size="small" style="width:120px;margin-left:auto" />
+        </div>
+        <el-table :data="filteredChannels" stripe size="small" height="400" class="ch-table">
+          <el-table-column label="#" type="index" width="40" />
+          <el-table-column label="频道名" min-width="120">
+            <template #default="{ row, $index }">
+              <el-input v-model="row.name" size="small" @change="saveChannelRow($index)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="分组" width="90">
+            <template #default="{ row, $index }">
+              <el-input v-model="row.group" size="small" @change="saveChannelRow($index)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="启用" width="50">
+            <template #default="{ row, $index }">
+              <el-switch v-model="row.enabled" size="small" @change="saveChannelRow($index)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="保留" width="60">
+            <template #default="{ row, $index }">
+              <el-input-number v-model="row.max_results" :min="1" :max="50" size="small"
+                @change="saveChannelRow($index)" />
+            </template>
+          </el-table-column>
+          <el-table-column width="40">
+            <template #default="{ $index }">
+              <el-button size="small" text type="danger" @click="delChannel($index)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
       <template #footer>
-        <el-button @click="singleTestVisible = false">关闭</el-button>
+        <el-button @click="showChannelEditor = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 定时设置对话框 -->
+    <el-dialog v-model="showScheduleDlg" title="定时更新设置" width="420px">
+      <el-form :model="scheduleCfg" label-width="80px" size="small">
+        <el-form-item label="启用">
+          <el-switch v-model="scheduleCfg.enabled" />
+        </el-form-item>
+        <el-form-item label="时间">
+          <el-input-number v-model="scheduleCfg.hour" :min="0" :max="23" /> :
+          <el-input-number v-model="scheduleCfg.minute" :min="0" :max="59" />
+        </el-form-item>
+        <el-form-item label="IP 版本">
+          <el-radio-group v-model="scheduleCfg.ip_version">
+            <el-radio label="ipv4">IPv4</el-radio>
+            <el-radio label="ipv6">IPv6</el-radio>
+            <el-radio label="both">双栈</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="源类型">
+          <el-select v-model="scheduleCfg.source_type" style="width:160px">
+            <el-option label="全部" value="all" />
+            <el-option label="组播" value="multicast" />
+            <el-option label="酒店" value="hotel" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="并发/超时">
+          <el-input-number v-model="scheduleCfg.concurrency" :min="5" :max="50" /> /
+          <el-input-number v-model="scheduleCfg.timeout" :min="2" :max="15" />s
+        </el-form-item>
+        <el-form-item label="每频道保留">
+          <el-input-number v-model="scheduleCfg.max_keep" :min="1" :max="50" /> 条
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showScheduleDlg = false">取消</el-button>
+        <el-button type="primary" @click="saveSchedule">保存</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { apiSearch, apiValidate, apiValidateSingle, apiExportM3u, apiExportTxt, apiExportFull } from '@/api/search'
-import { apiGetBuiltins } from '@/api/search'
+import request from '@/api/request'
 
-const page_size = 50
-const pageAll = ref(1)
-const pageValid = ref(1)
-const pageInvalid = ref(1)
-const activeTab = ref('all')
-
-const searchForm = reactive({ source_type: 'all', concurrency: 5, timeout: 15 })
-const validateForm = reactive({ concurrency: 20, timeout: 5 })
-const customUrlsInput = ref('')
-
-const searching = ref(false)
-const validating = ref(false)
-const progress_pct = ref(0)
-const progress_text = ref('')
-const searchResult = ref([])
-const validResult = ref([])
-const singleTestVisible = ref(false)
-const singleTestResult = ref(null)
-const builtinVisible = ref(false)
-const builtinSources = ref({ multicast: [], hotel: [] })
-const builtinCount = computed(() => (builtinSources.value.multicast?.length || 0) + (builtinSources.value.hotel?.length || 0))
-
-const stats = reactive({ searched: 0, valid: 0, invalid: 0 })
-
-const validRate = computed(() => {
-  if (!stats.searched) return 0
-  return Math.round((stats.valid / stats.searched) * 100)
+// ============ 状态 ============
+const ipVersion = ref('ipv4')
+const sourceType = ref('all')
+const customUrls = ref('')
+const concurrency = ref(20)
+const timeout = ref(5)
+const maxKeep = ref(10)
+const running = ref(false)
+const progress = reactive({ pct: 0, text: '' })
+const entries = ref([])
+const channels = ref([])
+const stats = reactive({ total: 0, groups: {}, protocols: {} })
+const scheduleCfg = reactive({
+  enabled: false, hour: 3, minute: 0,
+  source_type: 'all', ip_version: 'ipv4',
+  concurrency: 20, timeout: 5, max_keep: 10,
 })
 
-const invalidResult = computed(() => searchResult.value.filter(r => r.validated === false))
-const pagedAll = computed(() => {
-  const s = (pageAll.value - 1) * page_size
-  return searchResult.value.slice(s, s + page_size)
-})
-const pagedValid = computed(() => {
-  const s = (pageValid.value - 1) * page_size
-  return validResult.value.slice(s, s + page_size)
-})
-const pagedInvalid = computed(() => {
-  const s = (pageInvalid.value - 1) * page_size
-  return invalidResult.value.slice(s, s + page_size)
+// 对话框
+const showChannelEditor = ref(false)
+const showScheduleDlg = ref(false)
+const chFilter = ref('')
+const filteredChannels = computed(() => {
+  if (!chFilter.value) return channels.value
+  const f = chFilter.value.toLowerCase()
+  return channels.value.filter(ch => ch.name.toLowerCase().includes(f) || ch.group.toLowerCase().includes(f))
 })
 
-// ============ 搜索 ============
-async function doSearch() {
-  searching.value = true
-  progress_pct.value = 10
-  progress_text.value = '正在从网上搜索 IPTV 源...'
+// ============ API ============
+async function api(path, method = 'get', data = null) {
   try {
-    const urls = customUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u)
-    const res = await apiSearch({
-      source_type: searchForm.source_type,
-      custom_urls: urls,
-      timeout: searchForm.timeout,
-      concurrency: searchForm.concurrency,
-    })
-    if (res.code === 0 && res.data) {
-      searchResult.value = (res.data.entries || []).map(e => ({ ...e, validated: undefined }))
-      stats.searched = res.data.total || searchResult.value.length
-      stats.valid = 0
-      stats.invalid = 0
-      validResult.value = []
-      activeTab.value = 'all'
-      ElMessage.success(`搜索完成！发现 ${stats.searched} 个地址（去重后）`)
-    }
-  } catch (e) {
-    ElMessage.error('搜索失败: ' + (e.message || '网络错误'))
-  } finally {
-    searching.value = false
-  }
+    const r = method === 'post' ? await request.post(path, data) : await request.get(path)
+    return r && r.code === 0 ? (r.data || {}) : null
+  } catch (e) { return null }
 }
 
-// ============ 验证 ============
-async function doValidate() {
-  if (!searchResult.value.length) return
-  validating.value = true
-  progress_pct.value = 5
-  progress_text.value = `正在验证 ${searchResult.value.length} 个地址可用性...`
-
-  try {
-    const res = await apiValidate({
-      concurrency: validateForm.concurrency,
-      timeout: validateForm.timeout,
-    })
-    if (res.code === 0 && res.data) {
-      // 标记有效
-      const validSet = new Set()
-      for (const e of (res.data.entries || [])) {
-        validSet.add(e.url)
-      }
-      for (const e of searchResult.value) {
-        if (validSet.has(e.url)) {
-          e.validated = true
-        } else {
-          e.validated = false
-        }
-      }
-      validResult.value = searchResult.value.filter(e => e.validated)
-      stats.valid = validResult.value.length
-      stats.invalid = searchResult.value.length - stats.valid
-      activeTab.value = 'valid'
-      ElMessage.success(`验证完成！${stats.valid}/${stats.searched} 个有效，剔除 ${stats.invalid} 个`)
-    }
-  } catch (e) {
-    ElMessage.error('验证失败: ' + (e.message || '网络错误'))
-  } finally {
-    validating.value = false
+// ============ 加载数据 ============
+async function loadChannels() {
+  const data = await api('/channels', 'get')
+  if (data) channels.value = data || []
+}
+async function loadStats() {
+  const data = await api('/stats', 'get')
+  if (data) {
+    stats.total = data.total || 0
+    stats.groups = data.groups || {}
+    stats.protocols = data.protocols || {}
   }
 }
+async function loadSchedule() {
+  const data = await api('/schedule', 'get')
+  if (data) Object.assign(scheduleCfg, data)
+}
 
-// ============ 单地址测试 ============
-async function testSingle(row) {
-  singleTestVisible.value = true
-  singleTestResult.value = null
+onMounted(async () => {
+  await loadChannels()
+  await loadStats()
+  await loadSchedule()
+})
+
+// ============ 执行流程 ============
+async function runPipeline() {
+  if (!channels.value.filter(ch => ch.enabled).length) {
+    ElMessage.warning('频道表为空，请先添加频道')
+    return
+  }
+  running.value = true
+  progress.pct = 10
+  progress.text = '正在搜索 IPTV 源...'
   try {
-    const res = await apiValidateSingle(row.url)
-    if (res.code === 0) {
-      singleTestResult.value = res.data
-      row.validated = res.data.valid
-      row.response_time = res.data.response_time
+    const res = await request.post('/run', {
+      source_type: sourceType.value,
+      ip_version: ipVersion.value,
+      concurrency: concurrency.value,
+      timeout: timeout.value,
+      max_keep: maxKeep.value,
+      search_timeout: 15,
+    })
+    if (res && res.code === 0 && res.data) {
+      entries.value = res.data.entries || []
+      if (res.data.stats) {
+        stats.total = res.data.stats.total_kept || 0
+      }
+      await loadStats()
+      ElMessage.success(`完成！搜索 ${res.data.stats.total_searched} 条 → 匹配 ${res.data.stats.total_matched} → 有效 ${res.data.stats.total_tested} → 保留 ${res.data.stats.total_kept} 条`)
+    } else {
+      ElMessage.error(res?.message || '执行失败')
     }
   } catch (e) {
-    ElMessage.error('测试失败')
+    ElMessage.error('网络错误: ' + (e.message || ''))
+  } finally {
+    running.value = false
   }
 }
 
 // ============ 导出 ============
-function downloadExport(format) {
-  window.open(`/api/export/${format}`, '_blank')
-}
+function dlM3U() { window.open('/api/export/m3u', '_blank') }
+function dlTXT() { window.open('/api/export/txt', '_blank') }
 
-function downloadFull(format) {
-  const url = `/api/export/${format}/full?source_type=${searchForm.source_type}&timeout=${validateForm.timeout}&concurrency=${validateForm.concurrency}`
-  window.open(url, '_blank')
-  ElMessage.info('一键流程已开始：搜索→验证→导出，文件准备好后自动下载')
+// ============ 频道表管理 ============
+async function addChannel() {
+  channels.value.push({ id: '', name: '新频道', group: '未分组', enabled: true, max_results: 10 })
 }
-
-// ============ 内置源列表 ============
-async function showBuiltinSources() {
-  try {
-    const res = await apiGetBuiltins()
-    if (res.code === 0 && res.data) {
-      builtinSources.value = res.data
-      builtinVisible.value = true
+async function delChannel(idx) {
+  const realIdx = channels.value.indexOf(filteredChannels.value[idx])
+  if (realIdx >= 0) {
+    const ch = channels.value[realIdx]
+    if (ch.id) {
+      await api(`/channels/${ch.id}`, 'delete')
     }
-  } catch (e) {
-    ElMessage.error('获取内置源列表失败')
+    channels.value.splice(realIdx, 1)
   }
+}
+async function saveChannelRow(idx) {
+  const ch = filteredChannels.value[idx]
+  if (!ch) return
+  if (ch.id) {
+    await api(`/channels/${ch.id}`, 'put', { name: ch.name, group: ch.group, enabled: ch.enabled, max_results: ch.max_results })
+  } else {
+    const res = await api('/channels', 'post', { name: ch.name, group: ch.group, enabled: ch.enabled, max_results: ch.max_results })
+    if (res && res.id) ch.id = res.id
+  }
+}
+async function importChannels() {
+  const input = prompt('批量导入频道（每行: 频道名,分组）:\n例:\nCCTV-1,央视\n湖南卫视,卫视')
+  if (!input) return
+  const lines = input.trim().split('\n').filter(l => l.trim())
+  const items = lines.map(l => {
+    const p = l.split(',')
+    return { name: p[0].trim(), group: p[1]?.trim() || '未分组', enabled: true, max_results: 10 }
+  })
+  const res = await api('/channels/import', 'post', items)
+  if (res) ElMessage.success(res.message || '导入成功')
+  await loadChannels()
+}
+async function resetChannels() {
+  if (!confirm('重置为默认频道表？')) return
+  await api('/channels/reset', 'post')
+  await loadChannels()
+  ElMessage.success('已重置')
+}
+
+// ============ 定时设置 ============
+async function saveSchedule() {
+  await api('/schedule', 'post', {
+    enabled: scheduleCfg.enabled,
+    hour: scheduleCfg.hour,
+    minute: scheduleCfg.minute,
+    source_type: scheduleCfg.source_type,
+    ip_version: scheduleCfg.ip_version,
+    concurrency: scheduleCfg.concurrency,
+    timeout: scheduleCfg.timeout,
+    max_keep: scheduleCfg.max_keep,
+  })
+  showScheduleDlg.value = false
+  ElMessage.success('定时设置已保存')
 }
 </script>
 
 <style>
-/* ============ 全局深色科技风 ============ */
 * { box-sizing: border-box; }
 body { margin: 0; background: #0a0e1a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
 
 .iptv-root { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -406,57 +396,39 @@ body { margin: 0; background: #0a0e1a; color: #e2e8f0; font-family: -apple-syste
 .topbar { height: 48px; background: #0f172a; border-bottom: 1px solid #1e293b; display: flex; align-items: center; padding: 0 16px; gap: 10px; flex-shrink: 0; }
 .brand { display: flex; align-items: center; gap: 8px; }
 .brand-text { font-size: 15px; font-weight: 700; background: linear-gradient(135deg, #06b6d4, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.topbar-right { margin-left: auto; }
+.sched-tag { background: #1e293b !important; border-color: #334155 !important; }
 
 /* 主布局 */
 .main-layout { flex: 1; display: flex; overflow: hidden; }
 
 /* 左侧面板 */
-.control-panel { width: 240px; background: #0f172a; border-right: 1px solid #1e293b; padding: 12px; overflow-y: auto; flex-shrink: 0; }
-.panel-section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #1e293b; }
-.panel-section h3 { font-size: 13px; color: #06b6d4; margin: 0 0 8px; display: flex; align-items: center; gap: 4px; }
-.panel-section label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 3px; }
+.control-panel { width: 230px; background: #0f172a; border-right: 1px solid #1e293b; padding: 10px; overflow-y: auto; flex-shrink: 0; }
+.panel-section { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #1e293b; }
+.panel-section h3 { font-size: 12px; color: #06b6d4; margin: 0 0 6px; display: flex; align-items: center; gap: 4px; }
+.panel-section label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 2px; }
 .full-btn { width: 100%; }
-.el-divider { border-color: #1e293b !important; }
-
-/* 右侧面板 */
-.result-panel { flex: 1; padding: 12px 16px; overflow: hidden; display: flex; flex-direction: column; }
-
-/* 统计 */
-.stats-row { display: flex; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
-.stat-card { flex: 1; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; text-align: center; }
-.stat-num { font-size: 22px; font-weight: 700; color: #e2e8f0; }
-.stat-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
-.stat-ok .stat-num { color: #22c55e; }
-.stat-fail .stat-num { color: #ef4444; }
 
 /* 进度 */
-.progress-area { margin-bottom: 12px; flex-shrink: 0; }
-.progress-text { font-size: 12px; color: #94a3b8; margin-top: 6px; text-align: center; }
+.progress-text { font-size: 11px; color: #94a3b8; margin-top: 4px; text-align: center; }
+
+/* 统计 */
+.mini-stats { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; color: #94a3b8; }
+.mini-stats .mg { background: #1e293b; padding: 1px 4px; border-radius: 3px; }
+
+/* 右侧 */
+.result-panel { flex: 1; padding: 8px 12px; overflow: hidden; }
+.url-text { font-size: 11px; word-break: break-all; }
 
 /* 表格 */
-.result-tabs { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-.result-tabs :deep(.el-tabs__content) { flex: 1; overflow: hidden; }
-.result-tabs :deep(.el-tab-pane) { height: 100%; }
 .el-table { background: transparent; }
-.el-table th.el-table__cell { background: #1e293b !important; color: #94a3b8 ! important; }
+.el-table th.el-table__cell { background: #1e293b !important; color: #94a3b8 !important; border-color: #1e293b !important; }
 .el-table tr { background: #0f172a !important; }
 .el-table--striped .el-table__body tr.el-table__row--striped td { background: #1e293b !important; }
 .el-table td.el-table__cell { border-color: #1e293b !important; color: #e2e8f0 !important; }
-.el-table th.el-table__cell { border-color: #1e293b !important; }
-.el-table--border .el-table__cell { border-color: #1e293b !important; }
 .el-table { --el-table-border-color: #1e293b; --el-table-header-bg-color: #1e293b; --el-table-row-hover-bg-color: #334155; }
 
-/* 标签页 */
-.result-tabs :deep(.el-tabs__item) { color: #94a3b8; }
-.result-tabs :deep(.el-tabs__item.is-active) { color: #06b6d4; }
-.result-tabs :deep(.el-tabs__active-bar) { background: #06b6d4; }
-.result-tabs :deep(.el-tabs__nav-wrap::after) { background: #1e293b; }
-
-/* 分页 */
-.el-pagination { --el-pagination-bg-color: transparent; --el-pagination-text-color: #94a3b8; --el-pagination-button-bg-color: #1e293b; }
-
-/* 对话框 */
-.el-dialog { --el-dialog-bg-color: #1e293b; }
-.el-dialog__title { color: #e2e8f0 !important; }
-.el-dialog__body { color: #94a3b8 !important; }
+/* 频道编辑器 */
+.channel-editor .ch-toolbar { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+.channel-editor .ch-table { background: transparent; }
 </style>

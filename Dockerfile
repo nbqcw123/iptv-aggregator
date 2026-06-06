@@ -49,14 +49,15 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 # 复制后端代码
 COPY backend/app/ ./app/
 
-# 从阶段1拷贝构建好的前端文件
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+# 从阶段1拷贝构建好的前端文件（vite 构建到 backend/app/static）
+COPY --from=frontend-builder /app/backend/app/static ./app/static
 
 # ------------------------------------------
 # 环境变量
 # ------------------------------------------
 # 数据库路径（镜像内默认值，可通过 -e 覆盖）
 ENV DB_PATH=/data/iptv.db
+ENV DATA_DIR=/data
 # Python 环境优化
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
