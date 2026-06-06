@@ -1,3 +1,6 @@
+# 加密凭据数据文件（永远不要提交）
+*.enc
+
 # Python
 backend/.venv/
 backend/__pycache__/
