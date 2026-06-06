@@ -1,0 +1,258 @@
+/* ============================================
+   IPTV 聚合管理系统 - 深色科技风主题
+   ============================================ */
+
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: #1a2235;
+  --bg-card-hover: #1e2a42;
+  --bg-sidebar: #0d1117;
+  --bg-input: #0f1629;
+  --border-color: #2a3a5c;
+  --border-light: #374151;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent-blue: #3b82f6;
+  --accent-cyan: #06b6d4;
+  --accent-green: #10b981;
+  --accent-purple: #8b5cf6;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-pink: #ec4899;
+  --glow-blue: rgba(59, 130, 246, 0.15);
+  --glow-cyan: rgba(6, 182, 212, 0.15);
+  --glow-green: rgba(16, 185, 129, 0.15);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans SC', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---- Element Plus 深色主题覆盖 ---- */
+.el-header {
+  background-color: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.el-aside {
+  background-color: var(--bg-sidebar) !important;
+  border-right: 1px solid var(--border-color) !important;
+}
+
+.el-main {
+  background-color: var(--bg-primary) !important;
+}
+
+.el-menu {
+  background-color: transparent !important;
+  border-right: none !important;
+}
+
+.el-menu-item {
+  color: var(--text-secondary) !important;
+}
+
+.el-menu-item.is-active {
+  color: var(--accent-cyan) !important;
+  background-color: var(--glow-cyan) !important;
+}
+
+.el-menu-item:hover {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+.el-table {
+  --el-table-bg-color: var(--bg-card);
+  --el-table-tr-bg-color: var(--bg-card);
+  --el-table-header-bg-color: var(--bg-secondary);
+  --el-table-text-color: var(--text-primary);
+  --el-table-header-text-color: var(--text-secondary);
+  --el-table-row-hover-bg-color: var(--bg-card-hover);
+  --el-table-border-color: var(--border-color);
+  background-color: transparent !important;
+}
+
+.el-table th.el-table__cell,
+.el-table td.el-table__cell {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.el-table--border .el-table__cell {
+  border-right: 1px solid var(--border-color) !important;
+}
+
+.el-table__inner-wrapper::before {
+  background-color: var(--border-color) !important;
+}
+
+.el-input__wrapper {
+  background-color: var(--bg-input) !important;
+  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+}
+
+.el-input__inner {
+  color: var(--text-primary) !important;
+}
+
+.el-select .el-input__wrapper {
+  background-color: var(--bg-input) !important;
+  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--accent-blue);
+  --el-button-border-color: var(--accent-blue);
+  --el-button-hover-bg-color: #2563eb;
+  --el-button-hover-border-color: #2563eb;
+}
+
+.el-button--success {
+  --el-button-bg-color: var(--accent-green);
+  --el-button-border-color: var(--accent-green);
+}
+
+.el-button--warning {
+  --el-button-bg-color: var(--accent-orange);
+  --el-button-border-color: var(--accent-orange);
+}
+
+.el-button--danger {
+  --el-button-bg-color: var(--accent-red);
+  --el-button-border-color: var(--accent-red);
+}
+
+.el-card {
+  --el-card-bg-color: var(--bg-card);
+  --el-card-border-color: var(--border-color);
+  border: 1px solid var(--border-color) !important;
+}
+
+.el-dialog {
+  --el-dialog-bg-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.el-dialog__title {
+  color: var(--text-primary) !important;
+}
+
+.el-dialog__body {
+  color: var(--text-secondary) !important;
+}
+
+.el-form-item__label {
+  color: var(--text-secondary) !important;
+}
+
+.el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-text-color: var(--text-secondary);
+  --el-pagination-button-bg-color: var(--bg-card);
+  --el-pagination-hover-color: var(--accent-cyan);
+}
+
+.el-pagination__total {
+  color: var(--text-muted) !important;
+}
+
+.el-tag {
+  border: none !important;
+}
+
+.el-popper {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.el-select-dropdown__item {
+  color: var(--text-secondary) !important;
+}
+
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+  background-color: var(--bg-card-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.el-select-dropdown__item.selected {
+  color: var(--accent-cyan) !important;
+}
+
+.el-checkbox {
+  --el-checkbox-text-color: var(--text-secondary);
+}
+
+.el-checkbox__inner {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border-light) !important;
+}
+
+.el-empty__description {
+  color: var(--text-muted) !important;
+}
+
+.el-loading-mask {
+  background-color: rgba(10, 14, 23, 0.8) !important;
+}
+
+.el-textarea__inner {
+  background-color: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ---- 科技风动画 ---- */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+.glow-dot {
+  animation: pulse-glow 2s ease-in-out infinite;
+}

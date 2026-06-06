@@ -1,0 +1,66 @@
+# ============================================================
+# IPTV 聚合器 - 飞牛 NAS (fnOS) Docker Compose 配置
+# ============================================================
+# 专为飞牛 NAS Docker 管理界面优化。
+#
+# 飞牛 NAS 注意事项:
+#   1. 端口映射使用 "宿主机端口:容器端口" 格式
+#   2. 数据卷使用绝对路径（如 /vol1/docker/iptv-aggregator/data）
+#   3. 飞牛 Docker 界面中直接填写容器参数即可
+#   4. 确保 NAS 系统已安装 Docker Compose 插件
+#
+# 飞牛 NAS 部署步骤:
+#   1. 将项目上传到 NAS（如 /vol1/docker/iptv-aggregator）
+#   2. 在终端执行: docker compose -f docker-compose.fnos.yml up -d
+#   3. 或使用飞牛 Docker 界面导入此 compose 文件
+#   4. 访问 http://<NAS-IP>:8080
+#
+# ARM64 支持: 镜像基于 python:3.11-slim，原生支持 ARM64 架构
+# ============================================================
+
+version: "3.9"
+
+services:
+  iptv-aggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 飞牛 NAS 建议设置明确的容器名
+    container_name: iptv-aggregator
+    # 端口映射
+    ports:
+      - "8080:8080"
+    # 数据持久化
+    # ⚠️ 飞牛 NAS 请修改为实际存储路径，例如:
+    #   - /vol1/docker/iptv-aggregator/data:/data        (第一块硬盘)
+    #   - /vol2/docker/iptv-aggregator/data:/data        (第二块硬盘)
+    volumes:
+      - ./data:/data
+    # 环境变量
+    environment:
+      - DB_PATH=/data/iptv.db
+      - TZ=Asia/Shanghai                    # 时区设置
+    # 重启策略
+    restart: unless-stopped
+    # 飞牛 NAS 资源配置（根据 NAS 硬件调整）
+    deploy:
+      resources:
+        limits:
+          # 群晖/飞牛 2GB 内存 NAS 建议不超过 512M
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    # 日志配置（避免日志占满 NAS 存储）
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
