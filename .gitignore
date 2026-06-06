@@ -1,5 +1,20 @@
+# Python
 backend/.venv/
-frontend/node_modules/
-frontend/dist/
+backend/__pycache__/
+backend/app/static/
 *.pyc
 __pycache__/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
