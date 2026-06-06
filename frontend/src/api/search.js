@@ -1,89 +1,53 @@
-import request from './request'
+import axios from 'axios'
 
-/**
- * 搜索任务相关 API
- */
-export const searchApi = {
-  // 获取搜索任务列表
-  getTasks(params) {
-    return request.get('/search/tasks', { params })
-  },
+const request = axios.create({
+  baseURL: '/api',
+  timeout: 120000,
+})
 
-  // 获取任务详情
-  getTaskDetail(id) {
-    return request.get(`/search/tasks/${id}`)
-  },
+request.interceptors.response.use(
+  res => res.data,
+  err => Promise.reject(err.response?.data || err)
+)
 
-  // 启动自动搜索
-  startAutoSearch(data) {
-    return request.post('/search/auto', data)
-  },
+export default request
 
-  // 启动自定义搜索
-  startCustomSearch(data) {
-    return request.post('/search/custom', data)
-  },
+// ============ 搜索 ============
+export function apiSearch(data) {
+  return request.post('/search', data)
+}
 
-  // 停止搜索任务
-  stopTask(id) {
-    return request.post(`/search/tasks/${id}/stop`)
-  },
+export function apiValidate(data) {
+  return request.post('/validate', data)
+}
 
-  // 暂停搜索任务
-  pauseTask(id) {
-    return request.post(`/search/tasks/${id}/pause`)
-  },
+export function apiValidateSingle(url) {
+  return request.get('/validate/single', { params: { url } })
+}
 
-  // 恢复搜索任务
-  resumeTask(id) {
-    return request.post(`/search/tasks/${id}/resume`)
-  },
+// ============ 导出 ============
+export function apiExportM3u() {
+  return request.get('/export/m3u')
+}
 
-  // 获取实时进度
-  getProgress(id) {
-    return request.get(`/search/tasks/${id}/progress`)
-  },
+export function apiExportTxt() {
+  return request.get('/export/txt')
+}
 
-  // 获取进度日志
-  getProgressLogs(id, params) {
-    return request.get(`/search/tasks/${id}/logs`, { params })
-  },
+export function apiExportFull(format, params = {}) {
+  return request.get(`/export/${format}/full`, { params })
+}
 
-  // 获取搜索结果
-  getResults(id, params) {
-    return request.get(`/search/tasks/${id}/results`, { params })
-  },
+// ============ 内置源 ============
+export function apiGetBuiltins() {
+  return request.get('/sources/builtin')
+}
 
-  // 获取内置源列表
-  getBuiltInSources() {
-    return request.get('/search/builtin-sources')
-  },
+export function apiAddBuiltin(data) {
+  return request.post('/sources/builtin/add', null, { params: data })
+}
 
-  // 启用/禁用内置源
-  toggleBuiltInSource(id, enabled) {
-    return request.post(`/search/builtin-sources/${id}/toggle`, { enabled })
-  },
-
-  // 添加自定义搜索源
-  addSearchSource(data) {
-    return request.post('/search/builtin-sources', data)
-  },
-
-  // 删除自定义搜索源
-  deleteSearchSource(id) {
-    return request.delete(`/search/builtin-sources/${id}`)
-  },
-
-  // 获取热门关键词
-  getHotKeywords() {
-    return request.get('/search/hot-keywords')
-  },
-
-  // 导出搜索结果
-  exportResults(id, format) {
-    return request.get(`/search/tasks/${id}/export`, {
-      params: { format },
-      responseType: 'blob',
-    })
-  },
+// ============ 统计 ============
+export function apiGetStats() {
+  return request.get('/stats')
 }
