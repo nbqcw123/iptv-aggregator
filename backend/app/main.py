@@ -5,11 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.models.database import init_db
 
 async def lifespan(app: FastAPI):
-    init_db()
-    print("✅ DB 初始化完成")
+    print("✅ 服务启动")
     from app.api.search import start_scheduler
     start_scheduler()
     yield

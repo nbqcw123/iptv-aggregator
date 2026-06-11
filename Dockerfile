@@ -49,7 +49,7 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 # 复制后端代码
 COPY backend/app/ ./app/
 
-# 从阶段1拷贝构建好的前端文件（vite 构建到 backend/app/static）
+# 从阶段1拷贝构建好的前端文件（vite 构建输出到 /app/backend/app/static）
 COPY --from=frontend-builder /app/backend/app/static ./app/static
 
 # ------------------------------------------
