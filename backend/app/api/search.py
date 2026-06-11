@@ -11,7 +11,7 @@ from app.core.searcher import (
     load_channels, save_channels,
     load_schedule, save_schedule,
     run_full_pipeline, load_result, save_result,
-    gen_m3u, gen_txt, load_speed_cache,
+    gen_m3u_from_result, gen_txt_from_result, load_speed_cache,
     MAX_KEEP, DATA_DIR,
 )
 
@@ -221,28 +221,24 @@ async def run_pipeline(req: SearchReq):
         "channel_stats": result["channel_stats"],
     }}
 
-# =-----------= 导出 ============
+# ============ 导出 ============
 
 @router.get("/export/m3u", summary="导出 M3U")
 async def export_m3u():
-    entries = load_result()
-    if not entries:
-        return PlainTextResponse(content="#EXTM3U\n", media_type="audio/x-mpegurl")
-    content = gen_m3u(entries)
-    header = f"attachment; filename=iptv_{len(entries)}.m3u"
+    content = gen_m3u_from_result()
+    if not content:
+        content = "#EXTM3U\n"
+    header = "attachment; filename=iptv.m3u"
     return PlainTextResponse(content=content, media_type="audio/x-mpegurl",
                             headers={"Content-Disposition": header})
 
+
 @router.get("/export/txt", summary="导出 TXT")
-async def export_txt(sep: str = Query(default=",")):
-    entries = load_result()
-    if not entries:
-        return PlainTextResponse(content="", media_type="text/plain")
-    content = gen_txt(entries, sep=sep)
-    header = f"attachment; filename=iptv_{len(entries)}.txt"
+async def export_txt():
+    content = gen_txt_from_result()
+    header = "attachment; filename=iptv.txt"
     return PlainTextResponse(content=content, media_type="text/plain",
                             headers={"Content-Disposition": header})
-
 @router.get("/export/full", summary="一键搜索→测速→导出 M3U")
 async def export_full(
     ip_version: str = Query(default="ipv4"),
