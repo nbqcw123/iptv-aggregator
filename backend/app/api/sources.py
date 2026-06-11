@@ -15,7 +15,7 @@ import time
 import json
 import os
 from typing import Optional
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
@@ -182,12 +182,10 @@ async def check_source(session, url: str, timeout: int = 10) -> dict:
 async def check_sources_batch(sources: list[Source], concurrency: int = 5, timeout: int = 10) -> list[dict]:
     """批量测速，并发执行"""
     sem = asyncio.Semaphore(max(1, concurrency))
-    results = []
 
-    async def _one(src: Source):
+    async def _one(src: Source, session):
         async with sem:
             result = await check_source(session, src.url, timeout)
-            # 更新源状态
             src.last_check = time.time()
             src.last_response_ms = result["response_ms"]
             src.entry_count = result["entry_count"]
@@ -196,7 +194,7 @@ async def check_sources_batch(sources: list[Source], concurrency: int = 5, timeo
             return {"id": src.id, **result}
 
     async with aiohttp.ClientSession() as session:
-        tasks = [_one(s) for s in sources if s.enabled]
+        tasks = [_one(s, session) for s in sources if s.enabled]
         results = await asyncio.gather(*tasks)
 
     return results

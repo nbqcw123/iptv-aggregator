@@ -282,16 +282,8 @@ async def _fetch(session, url: str, timeout: int) -> str:
         return await r.text(encoding='utf-8', errors='replace')
 
 async def search_all(source_type: str = "all", timeout: int = 15, concurrency: int = 5) -> list[dict]:
-    """从内置源搜索，返回原始条目列表"""
-    targets = []
-    if source_type in ("multicast", "all"):
-        for s in MULTICAST_IPV4:
-            targets.append({**s, "source_type": "multicast"})
-        for s in MULTICAST_IPV6:
-            targets.append({**s, "source_type": "multicast"})
-    if source_type in ("hotel", "all"):
-        for s in HOTEL_SOURCES:
-            targets.append({**s, "source_type": "hotel"})
+    """从数据源管理中获取启用的源进行搜索"""
+    targets = get_active_sources(source_type)
 
     sem = asyncio.Semaphore(concurrency)
     all_entries = []
