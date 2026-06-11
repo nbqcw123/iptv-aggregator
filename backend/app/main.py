@@ -17,8 +17,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="IPTV 聚合器 v3", version="3.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-from app.api.search import router
-app.include_router(router, prefix="/api")
+from app.api.search import router as search_router
+from app.api.sources import router as sources_router
+app.include_router(search_router, prefix="/api")
+app.include_router(sources_router, prefix="/api")
 
 @app.get("/api/health")
 async def health():

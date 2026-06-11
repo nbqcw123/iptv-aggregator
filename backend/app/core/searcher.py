@@ -74,6 +74,37 @@ HOTEL_SOURCES = [
     {"name": "fanmingming/h", "url": "https://live.fanmingming.com/tv/m3u/hotel.m3u"},
 ]
 
+def get_active_sources(source_type: str = "all") -> list[dict]:
+    """从数据源管理中获取启用的数据源"""
+    try:
+        from app.api.sources import load_sources
+        sources = load_sources()
+        active = [s for s in sources if s.enabled]
+        if source_type == "multicast":
+            active = [s for s in active if s.type == "multicast"]
+        elif source_type == "hotel":
+            active = [s for s in active if s.type == "hotel"]
+        # custom 始终包含
+        result = []
+        for s in active:
+            result.append({"name": s.name, "url": s.url, "source_type": s.type if s.type != "custom" else "multicast"})
+        return result if result else _fallback_sources(source_type)
+    except:
+        return _fallback_sources(source_type)
+
+def _fallback_sources(source_type: str) -> list[dict]:
+    """回退到硬编码默认源"""
+    result = []
+    if source_type in ("multicast", "all"):
+        for s in MULTICAST_IPV4:
+            result.append({**s, "source_type": "multicast"})
+        for s in MULTICAST_IPV6:
+            result.append({**s, "source_type": "multicast"})
+    if source_type in ("hotel", "all"):
+        for s in HOTEL_SOURCES:
+            result.append({**s, "source_type": "hotel"})
+    return result
+
 # ============ 频道表管理 ============
 
 def _ensure_dir():
