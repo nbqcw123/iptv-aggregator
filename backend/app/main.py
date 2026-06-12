@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
     from app.api.search import stop_scheduler
     stop_scheduler()
 
-app = FastAPI(title="IPTV 聚合器 v3", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="IPTV 聚合器 v4", version="4.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 from app.api.search import router as search_router

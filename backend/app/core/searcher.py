@@ -18,6 +18,9 @@ import subprocess
 from typing import Optional
 from dataclasses import dataclass, field, asdict
 
+# 导入采集器模块（存量校验 + SQLite）
+from app.core.collector import IpvDB, CHECK_TIMEOUT, full_collection
+
 # ============ 配置 ============
 MAX_KEEP = 10
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.expanduser("~"), ".iptv-data"))
@@ -529,6 +532,62 @@ async def speed_test(entries: list[PlayEntry], concurrency: int = 20, timeout: i
     return [r for r in results if r.valid]
 
 
+# ============ 存量 IP 校验（参考群晖 3 轮重试逻辑）============
+
+async def check_existing_entries(db: IpvDB, entries: list[PlayEntry], 
+                                  concurrency: int = 20, timeout: int = CHECK_TIMEOUT) -> dict:
+    """
+    存量 IP 检测 — 参考群晖 cqshushu/iptv-spider 逻辑：
+    1. 一轮检测所有 IP
+    2. 失效 IP 进行第 2 轮重试
+    3. 仍失效的进行第 3 轮重试
+    4. 超过阈值标记为暂时失效
+    """
+    total = len(entries)
+    if total == 0:
+        return {"total": 0, "valid": 0, "failed": 0, "retried": 0}
+    
+    sem = asyncio.Semaphore(concurrency)
+    
+    async def _check_one(e):
+        async with sem:
+            valid, rt, speed = await check_single(aiohttp.ClientSession(), e.url, timeout)
+            e.valid = valid
+            e.response_time = rt
+            e.speed = speed
+            return e
+    
+    # 第 1 轮
+    async with aiohttp.ClientSession() as session:
+        results = await asyncio.gather(*[_check_one(e) for e in entries])
+    
+    valid_entries = [e for e in results if e.valid]
+    failed_entries = [e for e in results if not e.valid]
+    
+    # 第 2 轮重试
+    if failed_entries:
+        await asyncio.sleep(1)
+        async with aiohttp.ClientSession() as session:
+            retry2 = await asyncio.gather(*[_check_one(e) for e in failed_entries])
+        still_failed = [e for e in retry2 if not e.valid]
+        valid_entries.extend([e for e in retry2 if e.valid])
+        failed_entries = still_failed
+    
+    # 第 3 轮重试
+    if failed_entries:
+        await asyncio.sleep(2)
+        async with aiohttp.ClientSession() as session:
+            retry3 = await asyncio.gather(*[_check_one(e) for e in failed_entries])
+        valid_entries.extend([e for e in retry3 if e.valid])
+    
+    return {
+        "total": total,
+        "valid": len(valid_entries),
+        "failed": total - len(valid_entries),
+        "entries": valid_entries,
+    }
+
+
 def keep_fastest(matched: dict, max_keep: int = MAX_KEEP) -> list[PlayEntry]:
     final = []
     for ch_id, entries in matched.items():
@@ -551,21 +610,59 @@ async def run_full_pipeline(
     max_keep: int = MAX_KEEP,
     search_timeout: int = 15,
     min_speed: float = 0.0,
+    enable_existing_check: bool = True,  # 是否启用存量校验
+    collect_pages: int = 5,              # 采集页数
+    collect_days: int = 7,               # 采集最近 N 天
 ) -> dict:
-    # 1. 搜索
+    """
+    完整流程（v4 优化）：
+    1. 采集新源（组播/酒店 API）
+    2. 订阅源聚合（M3U/TXT）
+    3. 频道匹配
+    4. 测速（支持速率过滤）
+    5. 存量 IP 校验（3轮重试）
+    6. 择优导出
+    """
+    db = IpvDB()
+    collection_stats = {}
+    
+    # 1. 采集新源（组播/酒店 API）
+    if source_type in ("all", "multicast", "hotel"):
+        collect_result = await full_collection(
+            pages=collect_pages, 
+            days=collect_days,
+            concurrency=concurrency,
+            source_type=source_type
+        )
+        collection_stats = {
+            "multicast_found": collect_result.get("multicast", {}).found_count if "multicast" in collect_result else 0,
+            "multicast_valid": collect_result.get("multicast", {}).valid_count if "multicast" in collect_result else 0,
+            "hotel_found": collect_result.get("hotel", {}).found_count if "hotel" in collect_result else 0,
+            "hotel_valid": collect_result.get("hotel", {}).valid_count if "hotel" in collect_result else 0,
+            "existing_check": collect_result.get("existing_check", {}),
+        }
+    
+    # 2. 订阅源聚合
     raw = await search_all(source_type=source_type, timeout=search_timeout)
 
-    # 2. 频道匹配
+    # 3. 频道匹配
     matched = match_channels(raw, channels)
     all_matched = []
     for ch_id, entries in matched.items():
         all_matched.extend(entries)
 
-    # 3. 测速
+    # 4. 测速（支持速率过滤）
     tested = await speed_test(all_matched, concurrency=concurrency, timeout=timeout,
                                ip_version=ip_version, min_speed=min_speed)
 
-    # 4. 择优
+    # 5. 存量 IP 校验（3轮重试）
+    existing_check_result = {}
+    if enable_existing_check:
+        existing_entries = [PlayEntry(name=e.name, url=e.url, group=e.group) for e in tested if e.valid]
+        existing_check_result = await check_existing_entries(db, existing_entries, concurrency, timeout)
+        tested = existing_check_result.get("entries", tested)
+
+    # 6. 择优
     tested_by_ch = {}
     for e in tested:
         for ch in channels:
@@ -582,7 +679,7 @@ async def run_full_pipeline(
         final.extend(kept)
         final_stats[ch_id] = len(kept)
 
-    # 5. 更新缓存
+    # 7. 更新缓存
     cache = load_speed_cache()
     for e in final:
         cache[e.url] = {
@@ -604,6 +701,9 @@ async def run_full_pipeline(
             "total_kept": len(final),
             "ip_version": ip_version,
             "max_keep": max_keep,
+            "min_speed": min_speed,
+            "collection": collection_stats,
+            "existing_check": existing_check_result,
         },
         "channel_stats": final_stats,
     }

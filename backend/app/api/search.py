@@ -14,6 +14,8 @@ from app.core.searcher import (
     gen_m3u_from_result, gen_txt_from_result, load_speed_cache,
     MAX_KEEP, DATA_DIR,
 )
+# v4 新增：采集器 + 存量校验
+from app.core.collector import full_collection, IpvDB, collect_multicast, collect_hotel
 
 router = APIRouter()
 
@@ -295,3 +297,89 @@ async def clear_speed_cache():
     if os.path.exists(f):
         os.remove(f)
     return {"code": 0, "message": "已清除", "data": None}
+
+
+# ============ v4 新增：采集器 API ============
+
+class CollectReq(BaseModel):
+    source_type: str = Field(default="all", description="multicast/hotel/all")
+    pages: int = Field(default=5, ge=1, le=20, description="采集页数")
+    days: int = Field(default=7, ge=1, le=30, description="采集最近N天")
+    concurrency: int = Field(default=20, ge=1, le=50)
+
+
+class ExistingCheckReq(BaseModel):
+    concurrency: int = Field(default=20, ge=1, le=50)
+    timeout: int = Field(default=5, ge=2, le=30)
+
+
+@router.post("/collect", summary="触发采集（组播/酒店源）")
+async def trigger_collection(req: CollectReq):
+    """手动触发采集任务"""
+    result = await full_collection(
+        pages=req.pages,
+        days=req.days,
+        concurrency=req.concurrency,
+        source_type=req.source_type,
+    )
+    
+    # 格式化响应
+    response = {"code": 0, "message": "采集完成", "data": {}}
+    
+    if "multicast" in result:
+        m = result["multicast"]
+        response["data"]["multicast"] = {
+            "found": m.found_count, "valid": m.valid_count, 
+            "failed": m.fail_count, "new": m.new_count
+        }
+    if "hotel" in result:
+        h = result["hotel"]
+        response["data"]["hotel"] = {
+            "found": h.found_count, "valid": h.valid_count,
+            "failed": h.fail_count, "new": h.new_count
+        }
+    if "existing_check" in result:
+        response["data"]["existing_check"] = result["existing_check"]
+    
+    return response
+
+
+@router.post("/check-existing", summary="存量IP校验（3轮重试）")
+async def trigger_existing_check(req: ExistingCheckReq):
+    """手动触发存量 IP 校验"""
+    db = IpvDB()
+    active_ips = db.get_active_ips()
+    
+    entries = [PlayEntry(name=ip["url"], url=ip["url"], group="") for ip in active_ips]
+    
+    from app.core.searcher import check_existing_entries
+    result = await check_existing_entries(db, entries, req.concurrency, req.timeout)
+    
+    return {"code": 0, "message": "校验完成", "data": {
+        "total": result["total"],
+        "valid": result["valid"],
+        "failed": result["failed"],
+        "active_count": db.get_ip_count("active"),
+        "failed_count": db.get_ip_count("temp_failed"),
+    }}
+
+
+@router.get("/db/stats", summary="数据库统计")
+async def get_db_stats():
+    """获取数据库统计信息"""
+    db = IpvDB()
+    return {"code": 0, "message": "ok", "data": {
+        "active_ips": db.get_ip_count("active"),
+        "temp_failed_ips": db.get_ip_count("temp_failed"),
+        "total_ips": db.get_ip_count("all"),
+    }}
+
+
+@router.get("/db/logs", summary="采集日志")
+async def get_collect_logs(limit: int = Query(default=20, ge=1, le=100)):
+    """获取采集日志"""
+    db = IpvDB()
+    rows = db.conn.execute(
+        "SELECT * FROM collect_log ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return {"code": 0, "message": "ok", "data": [dict(r) for r in rows]}

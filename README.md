@@ -1,21 +1,13 @@
 # IPTV 聚合器
 
-IPTV 直播源搜索聚合工具（参考 iptv-api / HerbertHe/iptv-sources 输出格式）。
-多源聚合 → 自动分类 → 测速验证 → 择优 → 导出 M3U + TXT。
+IPTV 组播源 + 酒店源搜索聚合工具。搜索 → 验证可用性 → 去重 → 导出 M3U + TXT。
 
 ## 功能
 
-- **多源聚合**：组播源 + 酒店源 + 订阅源（支持 GitHub 自动发现）
-- **自动分类**：按频道类型自动分类（央视/卫视/4K/财经/新闻/体育/电影/动画/游戏/音乐等 15 类）
-- **标准输出格式**：
-  - M3U：`#EXTINF:-1 tvg-name="CCTV1" tvg-logo="..." group-title="📺央视频道"` + `#EXTM3U x-tvg-url`
-  - TXT：emoji 分类头（`📺央视频道,#genre#`）
-- **数据源管理**：添加/编辑/删除/启用/禁用，按类型和地区分类
-- **数据源测速**：检测可用性 + 响应时间 + 频道数，支持批量/按分类测速
-- **频道测速验证**：并发检测（HEAD → GET 降级），IPv4/IPv6 过滤，速率过滤
-- **择优导出**：同一频道保留最快的 N 条，自动匹配频道图标
-- **定时更新**：后台定时自动搜索+测速+更新
-- **前端**：深色科技风 Web 界面，三标签页（搜索测速 / 数据源管理 / 频道表）
+- **搜索**：内置 6 个组播源 + 3 个酒店源，支持自定义 URL
+- **验证**：并发检测播放地址可用性（HEAD → GET 降级）
+- **导出**：M3U / TXT 格式，支持一键搜索→验证→导出
+- **前端**：深色科技风 Web 界面
 
 ## 快速开始
 
@@ -44,78 +36,18 @@ npm run dev
 
 ## API
 
-### 数据源管理
-
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | /api/sources | 获取数据源列表（支持 ?type=&region=&keyword=&enabled_only= 筛选） |
-| POST | /api/sources | 添加数据源 |
-| PUT | /api/sources/{id} | 更新数据源 |
-| DELETE | /api/sources/{id} | 删除数据源 |
-| POST | /api/sources/import | 批量导入数据源 |
-| POST | /api/sources/reset | 重置为默认数据源 |
-| GET | /api/sources/stats | 数据源统计（按类型/地区/状态） |
-| POST | /api/sources/check | 批量测速（支持 ?ids= 指定，默认测全部启用源） |
-| POST | /api/sources/check/{id} | 测速单个数据源 |
-| GET | /api/sources/search-online | 搜索全网公开数据源（GitHub） |
-
-### 频道表
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/channels | 获取频道表 |
-| POST | /api/channels | 添加频道 |
-| PUT | /api/channels/{id} | 更新频道 |
-| DELETE | /api/channels/{id} | 删除频道 |
-| POST | /api/channels/import | 批量导入频道 |
-| POST | /api/channels/reset | 重置为默认频道表 |
-
-### 搜索与导出
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/run | 执行完整流程：搜索→测速→择优 |
+| POST | /api/search | 搜索 IPTV 源 |
+| POST | /api/validate | 验证所有地址 |
+| GET | /api/validate/single?url= | 验证单个地址 |
 | GET | /api/export/m3u | 导出 M3U |
 | GET | /api/export/txt | 导出 TXT |
-| GET | /api/export/full | 一键搜索→测速→导出 M3U |
-| GET | /api/stats | 当前结果统计 |
-| GET | /api/speed/cache | 测速缓存 |
-| DELETE | /api/speed/cache | 清除测速缓存 |
-
-### 定时任务
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/schedule | 获取定时配置 |
-| POST | /api/schedule | 更新定时配置 |
-
-### 其他
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/health | 健康检查 |
-| GET | /docs | Swagger API 文档 |
-
-## 数据源类型
-
-- **multicast** — 组播源（各地广电组播）
-- **hotel** — 酒店源（酒店 IPTV）
-- **custom** — 自定义源
-
-## 地区分类
-
-| 代码 | 地区 |
-|------|------|
-| cn | 中国大陆 |
-| hk | 中国香港 |
-| tw | 中国台湾 |
-| kr | 韩国 |
-| jp | 日本 |
-| sg | 新加坡 |
-| us | 美国 |
-| uk | 英国 |
-| overseas | 海外其他 |
-| unknown | 未知（自动检测） |
+| GET | /api/export/m3u/full | 搜索→验证→导出 M3U |
+| GET | /api/export/txt/full | 搜索→验证→导出 TXT |
+| GET | /api/stats | 搜索统计 |
+| GET | /api/sources/builtin | 内置源列表 |
+| POST | /api/sources/builtin/add | 添加自定义源 |
 
 ## 项目结构
 
@@ -123,15 +55,11 @@ npm run dev
 iptv-aggregator/
 ├── backend/app/
 │   ├── main.py          # FastAPI 入口
-│   ├── api/
-│   │   ├── search.py    # 搜索/验证/导出/定时 API
-│   │   └── sources.py   # 数据源管理 API（CRUD + 测速 + 全网搜索）
-│   ├── core/
-│   │   └── searcher.py  # 搜索引擎 + 测速器 + 频道匹配
-│   └── static/          # 前端构建产物
+│   ├── api/search.py    # 搜索/验证/导出 API
+│   └── core/searcher.py # 搜索引擎 + 验证器
 ├── frontend/src/
-│   ├── App.vue          # 主界面（三标签页）
-│   └── api/request.js   # API 客户端
+│   ├── App.vue          # 主界面
+│   └── api/search.js    # API 客户端
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
@@ -139,7 +67,5 @@ iptv-aggregator/
 
 ## 版本
 
-- **v3.2.0** (2026-06-11) — 参考 iptv-api 升级：emoji 自动分类 + tvg-name/tvg-logo + 订阅源 + 速率过滤
-- **v3.1.0** (2026-06-11) — 数据源管理：CRUD + 分类 + 测速 + 全网搜索
-- **v3.0.1** (2026-06-11) — 修复：移除未使用的 database 模块，清理依赖
-- **v3.0.0** (2026-06-06) — 频道表 + 测速择优 + 定时更新
+- **v4.0.1** (2026-06-12) — 精简重构，专注搜索+验证+导出
+- v1.0.0 (2026-06-06) — 初始版本
