@@ -186,18 +186,27 @@ class IpvDB:
 
 # ============ API 源采集 ============
 
-# 组播源 API（参考 iptv-spider）
+# 组播源 API（参考群晖 cqshushu/iptv-spider v2.1.1）
+# 主 API: http://api.cqshushu.com/multicast.php
+# 搜索接口: http://foodieguide.com/iptvsearch/getall.php?ip={ip_port}&c=&tk=&p=
 MULTICAST_APIS = [
-    # 各地广电组播地址
-    "https://api.iptv.org.cn/api/multicast/list",
-    "https://iptv-api.vercel.app/api/multicast",
+    # cqshushu 组播 API（需 token: cQshuShu88888888）
+    "http://api.cqshushu.com/multicast.php",
+    # 在线 M3U 源作为补充
+    "https://iptv-org.github.io/iptv/countries/cn.m3u",
 ]
 
 # 酒店源 API
+# 主 API: http://api.cqshushu.com/hotel.php
 HOTEL_APIS = [
-    "https://api.iptv.org.cn/api/hotel/list",
-    "https://iptv-api.vercel.app/api/hotel",
+    # cqshushu 酒店 API
+    "http://api.cqshushu.com/hotel.php",
 ]
+
+# cqshushu API 配置
+CQSHUSHU_TOKEN = "cQshuShu88888888"
+CQSHUSHU_BASE_URL = "http://api.cqshushu.com"
+FOODIUGUIDE_SEARCH_URL = "http://foodieguide.com/iptvsearch/getall.php"
 
 # 在线列表源（M3U/TXT）
 ONLINE_M3U_SOURCES = [
@@ -306,18 +315,58 @@ async def check_url(session, url: str, timeout: int = CHECK_TIMEOUT) -> tuple:
 
 async def collect_multicast(db: IpvDB, pages: int = 5, days: int = AUTO_DAYS,
                              concurrency: int = 20) -> CollectResult:
-    """采集组播源"""
+    """采集组播源（cqshushu API + 在线 M3U）"""
     result = CollectResult(source_type="multicast")
     existing_urls = db.get_existing_urls()
     
-    # 从在线 M3U 源获取
     async with aiohttp.ClientSession() as session:
         all_urls = []
+        
+        # 1. 从 cqshushu API 获取（翻页）
+        for page in range(1, pages + 1):
+            try:
+                params = {
+                    "token": CQSHUSHU_TOKEN,
+                    "page": page,
+                    "days": days,
+                    "type": "multicast"
+                }
+                headers = {
+                    "User-Agent": "okhttp/3.12.1",
+                    "clientType": "3",
+                    "appId": "ys7",
+                }
+                async with session.get(
+                    f"{CQSHUSHU_BASE_URL}/multicast.php",
+                    params=params, headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=API_TIMEOUT), ssl=False
+                ) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        if isinstance(data, list):
+                            for item in data:
+                                url = item.get("url", "") or item.get("stream", "")
+                                if url:
+                                    all_urls.append(url)
+                        elif isinstance(data, dict):
+                            items = data.get("data", []) or data.get("list", []) or data.get("result", [])
+                            for item in items:
+                                url = item.get("url", "") or item.get("stream", "")
+                                if url:
+                                    all_urls.append(url)
+            except Exception as e:
+                print(f"  cqshushu multicast page {page} error: {e}")
+        
+        # 2. 从在线 M3U 源获取（补充）
         for src in ONLINE_M3U_SOURCES:
-            text = await _fetch_text(session, src["url"])
-            if text:
-                urls = _parse_m3u(text)
-                all_urls.extend(urls)
+            if src["url"].endswith(".m3u"):
+                text = await _fetch_text(session, src["url"])
+                if text:
+                    urls = _parse_m3u(text)
+                    all_urls.extend(urls)
+        
+        # 去重
+        all_urls = list(set(all_urls))
         
         # 过滤已存在的
         new_urls = [u for u in all_urls if u not in existing_urls]
@@ -349,17 +398,57 @@ async def collect_multicast(db: IpvDB, pages: int = 5, days: int = AUTO_DAYS,
 
 async def collect_hotel(db: IpvDB, pages: int = 5, days: int = AUTO_DAYS,
                          concurrency: int = 20) -> CollectResult:
-    """采集酒店源"""
+    """采集酒店源（cqshushu API + 在线 TXT）"""
     result = CollectResult(source_type="hotel")
     existing_urls = db.get_existing_urls()
     
     async with aiohttp.ClientSession() as session:
         all_urls = []
+        
+        # 1. 从 cqshushu API 获取（翻页）
+        for page in range(1, pages + 1):
+            try:
+                params = {
+                    "token": CQSHUSHU_TOKEN,
+                    "page": page,
+                    "days": days,
+                    "type": "hotel"
+                }
+                headers = {
+                    "User-Agent": "okhttp/3.12.1",
+                    "clientType": "3",
+                    "appId": "ys7",
+                }
+                async with session.get(
+                    f"{CQSHUSHU_BASE_URL}/hotel.php",
+                    params=params, headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=API_TIMEOUT), ssl=False
+                ) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        if isinstance(data, list):
+                            for item in data:
+                                url = item.get("url", "") or item.get("stream", "")
+                                if url:
+                                    all_urls.append(url)
+                        elif isinstance(data, dict):
+                            items = data.get("data", []) or data.get("list", []) or data.get("result", [])
+                            for item in items:
+                                url = item.get("url", "") or item.get("stream", "")
+                                if url:
+                                    all_urls.append(url)
+            except Exception as e:
+                print(f"  cqshushu hotel page {page} error: {e}")
+        
+        # 2. 从在线 TXT 源获取（补充）
         for src in ONLINE_TXT_SOURCES:
             text = await _fetch_text(session, src["url"])
             if text:
                 urls = _parse_txt(text)
                 all_urls.extend(urls)
+        
+        # 去重
+        all_urls = list(set(all_urls))
         
         new_urls = [u for u in all_urls if u not in existing_urls]
         result.found_count = len(all_urls)
