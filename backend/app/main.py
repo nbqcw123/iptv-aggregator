@@ -27,7 +27,7 @@ async def health():
     return {"status": "ok", "service": "iptv-aggregator", "version": "3.0.0"}
 
 # 前端静态文件
-frontend_dist = Path(__file__).resolve().parent / "app" / "static"
+frontend_dist = Path(__file__).resolve().parent / "static"
 if frontend_dist.is_dir() and (frontend_dist / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
     @app.get("/{full_path:path}", include_in_schema=False)
